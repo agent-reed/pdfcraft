@@ -2361,6 +2361,86 @@ mod tests {
     }
 
     #[test]
+    fn other_colour_opens_the_picker_inside_the_quick_bar_fill_popup() {
+        use egui_kittest::kittest::Queryable;
+        let prefs = CommentPrefs::default();
+        let fill_label = if prefs.style(CommentTool::Rectangle).fill.is_some() { "Fill colour" } else { "Fill colour: none" };
+        let mut h = egui_kittest::Harness::new_ui_state(
+            |ui, prefs: &mut CommentPrefs| {
+                let _ = quick_bar_controls(ui, CommentTool::Rectangle, prefs);
+            },
+            prefs,
+        );
+        h.ctx.set_fonts(theme::font_definitions());
+        h.run();
+        h.get_by_label(fill_label).click();
+        h.run();
+        h.get_by_label("Other colour…").click();
+        h.run();
+        assert!(h.query_by_label("Apply").is_some(), "the popup stays open with the picker showing");
+        h.get_by_label("Apply").click();
+        h.run();
+        assert!(h.query_by_label("No fill").is_none(), "applying a colour closes the popup");
+        assert!(h.state().style(CommentTool::Rectangle).fill.is_some());
+    }
+
+    #[test]
+    fn context_menu_colour_submenu_keeps_its_picker_open_and_a_swatch_closes_the_menu() {
+        use egui_kittest::kittest::Queryable;
+        let info = DocInfo {
+            pages: vec![PageInfo { width: 300.0, height: 400.0, label: String::new(), crop: [0.0, 0.0, 300.0, 400.0], rotation: 0 }],
+            annotations: vec![Annotation {
+                page: 0,
+                subtype: "Square".into(),
+                author: None,
+                contents: None,
+                modified: None,
+                name: None,
+                in_reply_to: None,
+                rect: [10.0, 10.0, 50.0, 50.0],
+                color: None,
+                index: 0,
+                state: None,
+                quads: Vec::new(),
+                locked: false,
+                intent: None,
+                fill_sign: false,
+                points: Vec::new(),
+            }],
+            ..Default::default()
+        };
+        let mut view = DocView::new(pdfcraft_engine::DocId(1), &info, crate::canvas::ViewDefaults::default());
+        view.comments.selected = Some((0, 0));
+        let prefs = CommentPrefs::default();
+        let mut h = egui_kittest::Harness::new_ui_state(
+            |ui, (view, actions): &mut (DocView, Vec<CanvasAction>)| {
+                ui.button("Page").context_menu(|ui| {
+                    if let Some(a) = context_menu(ui, view, &info, &prefs, true) {
+                        actions.push(a);
+                    }
+                });
+            },
+            (view, Vec::new()),
+        );
+        h.run();
+        h.get_by_label("Page").click_secondary();
+        h.run();
+        h.get_by_label("Colour ⏵").click();
+        h.run();
+        h.get_by_label("Other colour…").click();
+        h.run();
+        assert!(h.query_by_label("Apply").is_some(), "the submenu stays open with the picker showing");
+        h.get_by_label("Red").click();
+        h.run();
+        assert!(h.query_by_label("Edit text…").is_none(), "picking a swatch closes the whole menu");
+        let actions = &h.state().1;
+        assert!(
+            matches!(actions.as_slice(), [CanvasAction::Edit(e)] if matches!(**e, Edit::StyleAnnotation { page: 0, index: 0, color: Some(_), .. })),
+            "{actions:?}"
+        );
+    }
+
+    #[test]
     fn shift_keeps_the_current_proportions_unless_the_box_has_its_own() {
         let r = Rect::from_min_max(pos2(100.0, 100.0), pos2(196.0, 132.0));
         assert_eq!(corner_ratio(r, None, false), None);
